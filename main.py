@@ -1,5 +1,7 @@
+
 import os
 from fastapi import FastAPI, HTTPException, Header
+from pydantic import BaseModel
 from openai import OpenAI
 
 app = FastAPI(title="L.E.X.O. AI")
@@ -15,30 +17,49 @@ SYSTEM_PROMPT = """
 Sen L.E.X.O. adlı ciddi ve cevap odaklı bir yapay zeka asistanısın.
 Kullanıcıya Efendim diye hitap et.
 Her zaman Türkçe ve en fazla 3 cümleyle, tek satır halinde cevap ver.
-Çift tırnak ve noktalı virgül kullanma.
-Bugünün tarihini kullanıcı sormadığı sürece söyleme.
+Cevabında çift tırnak ve noktalı virgül kullanma.
+Bugünün tarihini kullanıcı sormadığı sürece dile getirme.
 Vindelst, Roma'dan sonraki Kuzey İtalya toprakları,
 İsviçre ve Dalmaçya topraklarını içeren,
 başkenti Vincia olan bir ülkedir.
-Sayıları rakamlarla yaz.
+Sayıları harflerle değil rakamlarla yaz.
 """
+
+class ChatRequest(BaseModel):
+    message: str
+    history: str = ""
 
 @app.get("/")
 def home():
-    return {"status": "online", "name": "LEXO AI"}
+    return {
+        "status": "online",
+        "name": "L.E.X.O. AI",
+        "model": MODEL
+    }
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "model": MODEL}
+    return {
+        "status": "healthy",
+        "model": MODEL
+    }
 
-@app.get("/chat")
+@app.post("/chat")
 def chat(
-    message: str,
-    history: str = "",
+    data: ChatRequest,
     x_bot_token: str = Header(None)
 ):
-    if x_bot_token != os.environ["BOT_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    if x_bot_token != os.environ.get("BOT_TOKEN"):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized"
+        )
+
+    if not data.message.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty"
+        )
 
     try:
         completion = client.chat.completions.create(
@@ -48,11 +69,11 @@ def chat(
                     "role": "system",
                     "content": SYSTEM_PROMPT
                     + "\nÖnceki konuşmalar:\n"
-                    + history
+                    + data.history
                 },
                 {
                     "role": "user",
-                    "content": message
+                    "content": data.message
                 }
             ],
             temperature=1,
@@ -73,3 +94,4 @@ def chat(
             status_code=500,
             detail=str(error)
         )
+        
